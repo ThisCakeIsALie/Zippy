@@ -6,27 +6,17 @@ interface ListState {
   selected: number;
 }
 
+type ListEvent = (item: blessed.Widgets.BlessedElement, name: string, index: number) => void
+
 interface ListProps {
   screen: blessed.Widgets.Screen;
   items: string[];
   active: string[];
   initialSelected?: number;
   autoFocus?: boolean;
-  onSelect?(
-    item: blessed.Widgets.BlessedElement,
-    name: string,
-    index: number
-  ): void;
-  onChange?(
-    item: blessed.Widgets.BlessedElement,
-    name: string,
-    index: number
-  ): void;
-  onCancel?(
-    item: blessed.Widgets.BlessedElement,
-    name: string,
-    index: number
-  ): void;
+  onSelect?: ListEvent;
+  onChange?: ListEvent;
+  onCancel?: ListEvent;
   onKeypress?(
     key: string,
     item: blessed.Widgets.BlessedElement,
