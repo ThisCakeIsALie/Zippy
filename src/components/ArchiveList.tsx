@@ -1,18 +1,19 @@
 import * as React from "react";
 import * as blessed from "blessed";
-import { ArchiveTree, followPath } from "../ZipHandler";
+import Archiver from "../Archiver";
 import { List } from "./List";
+import { Entry } from "../Archiver";
 import produce from "immer";
 
 interface ArchiveListState {
-  openDirectories: string[];
+  openDirectory: Entry | "root";
 }
 
 interface ArchiveListProps {
   screen: blessed.Widgets.Screen;
-  archive: ArchiveTree;
-  onSelect?(curArchive: ArchiveTree): void;
-  onChange?(curArchive: ArchiveTree): void;
+  archive: Archiver;
+  onSelect?(current: Entry): void;
+  onChange?(current: Entry): void;
 }
 
 export class ArchiveList extends React.Component {
@@ -26,7 +27,7 @@ export class ArchiveList extends React.Component {
   constructor(props: ArchiveListProps) {
     super(props);
     this.state = {
-      openDirectories: []
+      openDirectory: "root"
     };
   }
 
@@ -36,49 +37,41 @@ export class ArchiveList extends React.Component {
       border: "line"
     };
 
-    const curArchive = followPath(
-      this.props.archive,
-      this.state.openDirectories
-    );
-
-    const items = [...curArchive.content.keys()];
-    const activeItems = items.filter(
-      name => curArchive.content.get(name).isOpen
-    );
+    const items = this.props.archive.childrenOf(this.state.openDirectory);
+    const activeItems = items.filter(entry => entry.status === "uncompressed");
 
     return (
       <List
         {...listStyle}
         screen={this.props.screen}
-        items={items}
-        active={activeItems}
+        items={items.map(entry => entry.name)}
+        active={activeItems.map(entry => entry.name)}
         onChange={(item, name, index) => {
           if (this.props.onChange) {
-            this.props.onChange(curArchive.content.get(name));
+            this.props.onChange(items.find(entry => entry.name === name));
           }
         }}
         onSelect={(item, name, index) => {
-          this.setState(
-            produce(draft => {
-              const child = curArchive.content.get(name);
-              if (child.content !== null) {
-                draft.openDirectories.push(name);
-              }
-            })
-          );
+          const child = items.find(entry => entry.name === name);
+          if (!child.isDirectory) {
+            return;
+          }
+          this.setState({
+            openDirectory: child
+          });
         }}
         onCancel={() => {
-          if (this.state.openDirectories.length > 0) {
-            this.setState(
-              produce(draft => {
-                draft.openDirectories.pop();
-              })
-            );
+          if (this.state.openDirectory !== "root") {
+            this.setState(state => {
+              return {
+                openDirectory: this.props.archive.parentOf(state.openDirectory)
+              };
+            });
           }
         }}
         onKeypress={(key, item, name, index) => {
           if (key === "c") {
-            const selected = curArchive.content.get(name);
+            const selected = items.find(entry => entry.name === name);
             if (this.props.onSelect) {
               this.props.onSelect(selected);
             }

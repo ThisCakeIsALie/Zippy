@@ -7,7 +7,7 @@ import * as del from "del";
 type EntryStatus = "compressed" | "uncompressed";
 type EntryInfo = undefined;
 
-interface Entry {
+export interface Entry {
   name: string;
   path: string;
   status: EntryStatus;
@@ -18,7 +18,7 @@ interface Entry {
 
 type EntryLike = Entry | string;
 
-export class Archiver {
+export default class Archiver {
   private readonly zipPath: string;
   private archive: Zip;
   private entries: Entry[];
@@ -44,6 +44,7 @@ export class Archiver {
     this.entries = await this.initializeEntries();
   }
 
+  //TODO: Handle opened files
   async compress(entry: EntryLike): Promise<void> {
     const actualEntry = this.getEntry(entry);
     if (actualEntry.status === "compressed") {
@@ -54,7 +55,7 @@ export class Archiver {
       await this.archive.addFile(actualEntry.path, Buffer.alloc(0));
       await this.archive.addLocalFolder(actualEntry.path, actualEntry.path);
     } else {
-      await this.archive.addLocalFile(actualEntry.path, actualEntry.path);
+      await this.archive.addLocalFile(actualEntry.path, this.getParentPathParts(actualEntry).join("/") + "/");
     }
     await this.archive.writeZip(this.zipPath);
     await del(actualEntry.path);
@@ -66,9 +67,10 @@ export class Archiver {
     if (actualEntry.status === "uncompressed") {
       throw new Error("Entry is already decompressed");
     }
+    const extractionPath = actualEntry.isDirectory ? actualEntry.path : this.getParentPathParts(actualEntry).join("/") + "/"
     await this.archive.extractEntryTo(
       actualEntry.archiveEntry,
-      actualEntry.path,
+      extractionPath,
       false,
       true
     );
@@ -100,13 +102,15 @@ export class Archiver {
 
     if (typeof entry === "string") {
       if (entry === "root") {
-        return this.entries.filter(otherEntry => this.getPathParts(otherEntry).length === 2);
+        return this.entries.filter(
+          otherEntry => this.getPathParts(otherEntry).length === 2
+        );
       }
       actualEntry = this.getEntry(entry);
     } else {
       actualEntry = entry;
     }
-    
+
     const path = this.getPathParts(actualEntry);
 
     return this.entries.filter(otherEntry => {
@@ -118,10 +122,16 @@ export class Archiver {
     });
   }
 
-  parentOf(entry: EntryLike): Entry {
+  parentOf(entry: EntryLike): Entry | "root" {
     const actualEntry =
       typeof entry !== "string" ? entry : this.getEntry(entry);
-    return this.getEntry(this.getPathParts(actualEntry).join("/") + "/");
+    const parentPath = this.getParentPathParts(actualEntry);
+    //If the new length is one then we reached the root
+    //Since the root has no representation in the zip we return the string root
+    if (parentPath.length === 1) {
+      return "root";
+    }
+    return this.getEntry(parentPath.join("/") + "/");
   }
 
   private getPathParts(entry: Entry) {
@@ -129,11 +139,17 @@ export class Archiver {
     return splitPath;
   }
 
+  private getParentPathParts(entry: Entry) {
+    return this.getPathParts(entry).slice(0,-1);
+  }
+
   private async initializeEntries(): Promise<Entry[]> {
     //Initializes all compressed entries
     const compressed: Entry[] = this.archive.getEntries().map(archiveEntry => {
       return {
-        name: archiveEntry.name,
+        name: archiveEntry.entryName
+          .split("/")
+          .slice(archiveEntry.isDirectory ? -2 : -1)[0],
         path: archiveEntry.entryName,
         status: "compressed" as EntryStatus,
         info: undefined,

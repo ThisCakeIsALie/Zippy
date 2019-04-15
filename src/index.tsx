@@ -8,5 +8,5 @@ const screen = blessed.screen({
   smartCSR: true
 });
 
-render(<App screen={screen} path="./test" />, screen);
+render(<App screen={screen} path={process.argv[2]} />, screen);
 screen.render();
